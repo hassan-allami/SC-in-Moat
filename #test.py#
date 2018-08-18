@@ -1,0 +1,158 @@
+import numpy as np
+from scipy import special as esp
+from scipy import linalg
+from matplotlib import pyplot as plt
+from scipy import integrate as intg
+
+
+#Ec is the Coulomb energy
+#L is the Lambda
+#g is the attraction
+# every energy is normalized to E_R = \kappa*p0^2
+# every length is nomalized to 1/p0 
+
+'''DEFINING THE GENERAL COULOMB FUNCTION'''
+
+def Coulomb(a, d):
+	integrand = lambda t: np.cos(t)/np.sqrt(1-a*np.cos(t))*(
+				1-np.exp(-d*np.sqrt(1-a*np.cos(t))))
+	I, err = intg.quad(integrand, 0, 2*np.pi)
+	return I/(2*np.pi)
+
+def coulomb(x,d):
+	X, Y = np.meshgrid(x,x)
+	R = np.sqrt(X**2 + Y**2)
+	a = 2*X*Y/R**2	
+	A = np.zeros(R.shape)
+	for i in range(len(x)):
+		for j in range(len(x)):
+			A[i, j] = Coulomb(a[i, j], d*R[i,j])/R[i, j]
+	return A
+
+
+
+'''DEFINING COULOMB FOR SPECIAL CASE OF NO SCREENING'''
+
+def Coul(a):
+	I = 4/(a*np.sqrt(1+a))*(esp.ellipk(2*a/(1+a+1e-15))
+				-(1+a)*esp.ellipe(2*a/(1+a+1e-15)))
+	return I/(2*np.pi)
+
+
+'''MAKING THE MESH'''
+
+m = 3 # means that size of the mesh is m*p0
+dx = 0.05 # tells how fine the mesh is
+x = np.arange(1e-15,m,dx)
+X, Y = np.meshgrid(x,x) # this makes the grid
+
+
+''' FINDING THE BOUND STATE ENERGY FOR GENERAL CASE'''
+
+def Bound_E(g,L,Ec,d):
+	xi = (x-1)**2 + L # this is the band
+	M = 2*np.diag(xi) + dx*X*(Ec*coulomb(x,d) - g)/(2*np.pi)
+	#M is the reduced Hamiltonain matrix
+	la, v = linalg.eigh(M) #solve it
+	E = min(la)
+	return E
+
+
+
+
+''' FINDING THE BOUND STATE ENERGY FOR NO-SCREENING'''
+
+def bound_energy(g,L,Ec):
+	xi = (x-1)**2 + L # this is the band
+	A = Ec*Coul(2*X*Y/(X**2+Y**2))/np.sqrt(X**2+Y**2) #this is the Coulomb part
+	M = 2*np.diag(xi) + dx*X*(A - g)/(2*np.pi)
+	#M is the reduced Hamiltonain matrix
+	la, v = linalg.eigh(M) #solve it
+	E = min(la)
+	return E
+
+
+
+''' FINDING THE CRTICAL g for NO SCREENING CASE'''
+
+def critical_g(L,Ec):
+	#first we find a rough estimation
+	g = np.linspace(1.14,1.165, 200)
+	E = np.zeros(len(g))
+	for i in range(len(g)):
+		E[i] = bound_energy(g[i],L,Ec) 
+	#find the g for which "absolute E" is the smallest	
+	gc = g[np.argmin(np.abs(E))] 
+		
+	return gc
+
+
+
+''' FINDING THE CRTICAL g for GENERAL CASE'''
+
+def Crit_g(L,Ec,d):
+	g = np.linspace(1.14,1.165, 200)
+	E = np.zeros(len(g))
+	for i in range(len(g)):
+		E[i] = Bound_E(g[i],L,Ec,d) 
+	#find the g for which "absolute E" is the smallest	
+	gc = g[np.argmin(np.abs(E))] 
+
+	return gc
+
+d = np.linspace(0, .1, 10)
+gc = np.zeros(len(d))
+
+Ec = 10
+
+'''
+f = open('Ec10L005.txt', 'w')
+
+for i in range(len(d)):
+	gc[i] = Crit_g(0.05, Ec , d[i])
+	f.write(str(d[i]) + '  ' + str(gc[i]) + '\n')
+	print(d[i], '    ', gc[i])
+
+f.close()
+'''
+f = open('Ec10L01.txt')
+
+data = f.read()
+data = data.split()
+data = np.array(list(map(float, data)))
+m = int(len(data)/2)
+data = np.reshape(data, (m, 2))
+gc1 = data[:, 1]
+g01 = gc1[0]
+
+f.close()
+
+f = open('Ec10L0.txt')
+
+data = f.read()
+data = data.split()
+data = np.array(list(map(float, data)))
+m = int(len(data)/2)
+data = np.reshape(data, (m, 2))
+gc2 = data[:, 1]
+
+f.close()
+
+f = open('Ec10L005.txt')
+
+data = f.read()
+data = data.split()
+data = np.array(list(map(float, data)))
+m = int(len(data)/2)
+data = np.reshape(data, (m, 2))
+gc3 = data[:, 1]
+g03 = critical_g(0.05, 0)
+
+f.close()
+
+plt.plot(d, gc2, 'o', d, gc1 - g01, 'x', d, gc3 - g03, '<', d, 2*Ec/3/np.pi*d**2)
+
+plt.show()
+
+#print('from no screening we get gc0 =', critical_g(0.05, 0))
+#print('from general case we get gc0 =', Crit_g(0.05, 10, 0))
